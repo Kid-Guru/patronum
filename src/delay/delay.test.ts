@@ -234,3 +234,39 @@ test('double delay effect', async () => {
     ]
   `);
 });
+
+test('cancel delayed', async () => {
+  const source = createEvent();
+  const cancel = createEvent();
+  const delayed = delay({ source, timeout: 100, cancel });
+  const fn = jest.fn();
+  delayed.watch(fn);
+
+  source(1);
+  expect(fn).toBeCalledTimes(0);
+
+  await wait(50);
+  cancel();
+
+  await wait(150);
+  expect(fn).toBeCalledTimes(0);
+});
+
+test('cancel double delayed', async () => {
+  const source = createEvent();
+  const cancel = createEvent();
+  const delayed = delay({ source, timeout: 100, cancel });
+  const fn = jest.fn();
+  delayed.watch(fn);
+
+  source(1);
+  expect(fn).toBeCalledTimes(0);
+
+  source(2);
+  expect(fn).toBeCalledTimes(0);
+
+  cancel();
+
+  await wait(150);
+  expect(fn).toBeCalledTimes(0);
+});

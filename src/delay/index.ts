@@ -17,6 +17,7 @@ export function delay<T>({
   source,
   timeout,
   target = createEvent<T>(),
+  cancel,
 }: {
   source: Unit<T>;
   timeout: ((_payload: T) => number) | Store<number> | number;
@@ -26,19 +27,40 @@ export function delay<T>({
     | Effect<T, any, any>
     | Event<void>
     | Effect<void, any, any>;
+  cancel?: Event<any>;
 }): EventAsReturnType<T> {
   if (!is.unit(source)) throw new TypeError('source must be a unit from effector');
 
   if (!is.unit(target)) throw new TypeError('target must be a unit from effector');
 
+  if (cancel && !is.event(cancel))
+    throw new TypeError('cancel must be a event from effector');
+
   const ms = validateTimeout(timeout);
+
+  const timersSet: Set<NodeJS.Timeout> = new Set();
 
   const timerFx = createEffect<{ payload: T; milliseconds: number }, T>(
     ({ payload, milliseconds }) =>
       new Promise((resolve) => {
-        setTimeout(resolve, milliseconds, payload);
+        let timer: NodeJS.Timeout;
+
+        timer = setTimeout(
+          (pl) => {
+            timersSet.delete(timer);
+            resolve(pl);
+          },
+          milliseconds,
+          payload,
+        );
+
+        timersSet.add(timer);
       }),
   );
+
+  const cancelFx = createEffect(() => {
+    timersSet.forEach(clearTimeout);
+  });
 
   sample({
     // ms can be Store<number> | number
@@ -52,6 +74,10 @@ export function delay<T>({
     }),
     target: timerFx,
   });
+
+  if (cancel !== undefined) {
+    sample({ clock: cancel, target: cancelFx });
+  }
 
   // @ts-expect-error
   forward({ from: timerFx.doneData, to: target });
